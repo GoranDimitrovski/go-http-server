@@ -8,7 +8,7 @@ import (
 
 var (
 	fileName string
-    store *TimestampMemoryStore
+	store *TimestampMemoryStore
 )
 
 func TestMain(m *testing.M) {
