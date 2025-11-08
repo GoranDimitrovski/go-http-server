@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"slices"
 	"simplesurance/persistence"
 	"sync"
 )
@@ -67,7 +66,6 @@ func (s *MemoryStore) Load(ctx context.Context) error {
 }
 
 // RemoveExpired removes timestamps older than the threshold
-// Uses Go 1.22 slices package for better performance
 func (s *MemoryStore) RemoveExpired(ctx context.Context, current, threshold int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -80,8 +78,14 @@ func (s *MemoryStore) RemoveExpired(ctx context.Context, current, threshold int)
 		}
 	}
 
-	// Use slices.Clip to release unused capacity
-	s.timestamps = slices.Clip(validTimestamps)
+	// Release unused capacity by creating a new slice with exact size
+	if len(validTimestamps) < cap(validTimestamps) {
+		trimmed := make([]int, len(validTimestamps))
+		copy(trimmed, validTimestamps)
+		s.timestamps = trimmed
+	} else {
+		s.timestamps = validTimestamps
+	}
 	return nil
 }
 
