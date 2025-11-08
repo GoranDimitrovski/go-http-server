@@ -1,0 +1,21 @@
+# Utility Commands (utils.* prefix)
+.PHONY: utils.clean utils.health utils.help
+
+utils.help:
+	@echo "Utility Commands (utils.*):"
+	@echo "  utils.health        - Check health endpoint"
+	@echo "  utils.clean         - Clean build artifacts and coverage files"
+
+# Check health endpoint
+utils.health:
+	@echo "Checking health endpoint..."
+	@curl -s http://localhost:8000/health || echo "Server not responding. Is it running?"
+
+# Clean build artifacts
+utils.clean:
+	@echo "Cleaning build artifacts..."
+	@rm -f app
+	@rm -f coverage.out coverage.html
+	@rm -f *.log
+	@find . -name "*.test" -type f -delete 2>/dev/null || true
+	@echo "Cleanup complete"

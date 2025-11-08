@@ -1,0 +1,65 @@
+# Docker Commands (app.* prefix)
+.PHONY: app.build app.build-only app.up app.down app.logs \
+	app.restart app.stop app.test app.shell app.help
+
+app.help:
+	@echo "Docker Commands (app.*):"
+	@echo "  app.build           - Build and start Docker containers"
+	@echo "  app.build-only      - Build Docker image only"
+	@echo "  app.up              - Start Docker containers"
+	@echo "  app.down            - Stop and remove Docker containers"
+	@echo "  app.logs            - View Docker container logs"
+	@echo "  app.restart         - Restart Docker containers"
+	@echo "  app.stop            - Stop Docker containers"
+	@echo "  app.test            - Run tests in Docker container"
+	@echo "  app.shell           - Open shell in Docker container"
+
+# Build and start Docker containers
+app.build:
+	@echo "Building and starting Docker containers..."
+	@docker-compose up --build -d
+	@echo "Containers started. Use 'make app.logs' to view logs."
+
+# Build Docker image only
+app.build-only:
+	@echo "Building Docker image..."
+	@docker-compose build
+
+# Start Docker containers
+app.up:
+	@echo "Starting Docker containers..."
+	@docker-compose up -d
+	@echo "Containers started. Use 'make app.logs' to view logs."
+
+# Stop and remove Docker containers
+app.down:
+	@echo "Stopping and removing Docker containers..."
+	@docker-compose down
+	@echo "Containers stopped and removed."
+
+# View Docker container logs
+app.logs:
+	@echo "Viewing Docker container logs (Ctrl+C to exit)..."
+	@docker-compose logs -f
+
+# Restart Docker containers
+app.restart:
+	@echo "Restarting Docker containers..."
+	@docker-compose restart
+	@echo "Containers restarted."
+
+# Stop Docker containers
+app.stop:
+	@echo "Stopping Docker containers..."
+	@docker-compose stop
+	@echo "Containers stopped."
+
+# Run tests in Docker container
+app.test:
+	@echo "Running tests in Docker container..."
+	@docker-compose exec go-http-server go test -v ./...
+
+# Open shell in Docker container
+app.shell:
+	@echo "Opening shell in Docker container..."
+	@docker-compose exec go-http-server sh

@@ -1,0 +1,42 @@
+# Development Commands (dev.* prefix)
+.PHONY: dev.run dev.build dev.fmt dev.vet dev.lint dev.help
+
+dev.help:
+	@echo "Development Commands (dev.*):"
+	@echo "  dev.run             - Run the application locally"
+	@echo "  dev.build           - Build the application locally"
+	@echo "  dev.fmt             - Format Go code"
+	@echo "  dev.vet             - Run go vet"
+	@echo "  dev.lint            - Run golangci-lint (if installed)"
+
+# Run the application locally
+dev.run:
+	@echo "Running application locally..."
+	@go run main.go
+
+# Build the application locally
+dev.build:
+	@echo "Building application locally..."
+	@go build -trimpath -ldflags='-w -s' -o app .
+	@echo "Build complete: ./app"
+
+# Format Go code
+dev.fmt:
+	@echo "Formatting Go code..."
+	@go fmt ./...
+	@echo "Formatting complete"
+
+# Run go vet
+dev.vet:
+	@echo "Running go vet..."
+	@go vet ./...
+	@echo "Vet complete"
+
+# Run golangci-lint
+dev.lint:
+	@echo "Running golangci-lint..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+	fi
