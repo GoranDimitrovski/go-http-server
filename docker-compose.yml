@@ -1,14 +1,52 @@
-version: '3'
+version: '3.9'
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      # Use BuildKit for cache mounts and faster builds
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: go-http-server
     ports:
-      - "8000:8000"
-    volumes:
-      - .:/go/src/app
+      - "${PORT:-8000}:8000"
     environment:
-      - CGO_ENABLED=0
-    container_name: app
-     
+      - FILENAME=${FILENAME:-timestamps.log}
+      - ADDRESS=${ADDRESS:-localhost}
+      - ROUTE=${ROUTE:-/}
+      - PORT=${PORT:-8000}
+      - THRESHOLD=${THRESHOLD:-60}
+    volumes:
+      - ./timestamps.log:/app/timestamps.log
+    restart: unless-stopped
+    # Resource limits for minimal memory usage
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.5'
+        reservations:
+          memory: 32M
+          cpus: '0.25'
+    # Health check using health endpoint
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app-network
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Read-only root filesystem for security
+    read_only: true
+    # Temporary filesystem for writable directories
+    tmpfs:
+      - /tmp
+
+networks:
+  app-network:
+    driver: bridge

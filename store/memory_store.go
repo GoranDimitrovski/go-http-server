@@ -1,93 +1,110 @@
 package store
 
 import (
-	"bufio"
-	"log"
-	"os"
-	"simplesurance/io"
-	"strconv"
+	"context"
+	"fmt"
+	"slices"
+	"simplesurance/persistence"
 	"sync"
 )
 
-type TimestampMemoryStore struct {
+// MemoryStore implements the Store interface using in-memory storage
+type MemoryStore struct {
 	timestamps []int
 	fileName   string
-	input      chan int
-	mutex      sync.Mutex
-	storeDone  chan struct{}
+	persister  persistence.FilePersistence
+	mu         sync.RWMutex
 }
 
-func New(fileName string) *TimestampMemoryStore {
-	store := &TimestampMemoryStore{
-		timestamps: []int{},
+// NewMemoryStore creates a new memory store instance
+func NewMemoryStore(fileName string, persister persistence.FilePersistence) *MemoryStore {
+	return &MemoryStore{
+		timestamps: make([]int, 0),
 		fileName:   fileName,
-		input:      make(chan int),
-		storeDone:  make(chan struct{}, 1),
-	}
-	go store.start()
-	return store
-}
-
-func (store *TimestampMemoryStore) start() {
-	for timestamp := range store.input {
-		store.mutex.Lock()
-		store.timestamps = append(store.timestamps, timestamp)
-		store.mutex.Unlock()
-		store.storeDone <- struct{}{} 
+		persister:  persister,
 	}
 }
 
-func (store *TimestampMemoryStore) Store(timestamp int) {
-	store.input <- timestamp
-	<-store.storeDone 
+// Store adds a timestamp to the store
+func (s *MemoryStore) Store(ctx context.Context, timestamp int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.timestamps = append(s.timestamps, timestamp)
+	return nil
 }
 
-func (store *TimestampMemoryStore) View() []int {
-	return append([]int{}, store.timestamps...)
+// View returns a copy of all timestamps
+func (s *MemoryStore) View(ctx context.Context) ([]int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]int, len(s.timestamps))
+	copy(result, s.timestamps)
+	return result, nil
 }
 
-func (store *TimestampMemoryStore) Count() int {
-	return len(store.timestamps)
+// Count returns the number of stored timestamps
+func (s *MemoryStore) Count(ctx context.Context) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return len(s.timestamps), nil
 }
 
-func (store *TimestampMemoryStore) Load() {
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
-
-	file := io.OpenFile(store.fileName, os.O_RDONLY)
-	defer io.CloseFile(file)
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		timestamp, err := strconv.Atoi(scanner.Text())
-		if err != nil {
-			log.Printf("failed parsing timestamp '%s': %s", scanner.Text(), err)
-			continue
-		}
-		store.timestamps = append(store.timestamps, timestamp)
+// Load loads timestamps from persistent storage
+func (s *MemoryStore) Load(ctx context.Context) error {
+	timestamps, err := s.persister.ReadAll(ctx, s.fileName)
+	if err != nil {
+		return fmt.Errorf("failed to load timestamps: %w", err)
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("error while scanning file: %s", err)
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.timestamps = timestamps
+	return nil
 }
 
-func (store *TimestampMemoryStore) RemoveExpired(current, threshold int) {
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
+// RemoveExpired removes timestamps older than the threshold
+// Uses Go 1.22 slices package for better performance
+func (s *MemoryStore) RemoveExpired(ctx context.Context, current, threshold int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var timestamps []int
-	for _, timestamp := range store.timestamps {
+	// Pre-allocate with estimated capacity for better performance
+	validTimestamps := make([]int, 0, len(s.timestamps))
+	for _, timestamp := range s.timestamps {
 		if current-timestamp < threshold {
-			timestamps = append(timestamps, timestamp)
+			validTimestamps = append(validTimestamps, timestamp)
 		}
 	}
-	store.timestamps = timestamps
+
+	// Use slices.Clip to release unused capacity
+	s.timestamps = slices.Clip(validTimestamps)
+	return nil
 }
 
-func (store *TimestampMemoryStore) Sync() {
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
+// Sync persists the current state to storage
+func (s *MemoryStore) Sync(ctx context.Context) error {
+	s.mu.RLock()
+	timestamps, err := s.View(ctx)
+	s.mu.RUnlock()
 
-	io.Rewrite(store.timestamps, store.fileName)
+	if err != nil {
+		return fmt.Errorf("failed to get timestamps for sync: %w", err)
+	}
+
+	if err := s.persister.Rewrite(ctx, timestamps, s.fileName); err != nil {
+		return fmt.Errorf("failed to sync timestamps: %w", err)
+	}
+
+	return nil
+}
+
+// Close gracefully closes the store and releases resources
+func (s *MemoryStore) Close() error {
+	// Memory store doesn't need cleanup, but we can sync before closing
+	ctx := context.Background()
+	return s.Sync(ctx)
 }
