@@ -38,8 +38,6 @@ func TestFilePersistence_Append(t *testing.T) {
 				t.Errorf("Append() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
-			// Verify file was created and contains the timestamp
 			if !persister.FileExists(filename) {
 				t.Error("File should exist after Append()")
 			}
@@ -86,20 +84,14 @@ func TestFilePersistence_Rewrite(t *testing.T) {
 
 			persister := NewFilePersistence()
 			ctx := context.Background()
-
-			// First append something
 			if err := persister.Append(ctx, 999999, filename); err != nil {
 				t.Fatalf("Append() error = %v", err)
 			}
-
-			// Then rewrite
 			err := persister.Rewrite(ctx, tt.timestamps, filename)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Rewrite() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
-			// Verify file contains only the rewritten timestamps
 			readTimestamps, err := persister.ReadAll(ctx, filename)
 			if err != nil {
 				t.Fatalf("ReadAll() error = %v", err)
@@ -223,4 +215,3 @@ func TestFilePersistence_FileExists(t *testing.T) {
 		})
 	}
 }
-

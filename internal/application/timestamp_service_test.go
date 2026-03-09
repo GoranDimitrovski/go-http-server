@@ -1,4 +1,4 @@
-package service
+package application
 
 import (
 	"context"
@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 )
-
-// mockStore is a mock implementation of store.Store for testing
-type mockStore struct {
+type mockRepo struct {
 	timestamps []int
 	storeErr   error
 	loadErr    error
@@ -17,7 +15,7 @@ type mockStore struct {
 	removeErr  error
 }
 
-func (m *mockStore) Store(ctx context.Context, timestamp int) error {
+func (m *mockRepo) Store(ctx context.Context, timestamp int) error {
 	if m.storeErr != nil {
 		return m.storeErr
 	}
@@ -25,24 +23,24 @@ func (m *mockStore) Store(ctx context.Context, timestamp int) error {
 	return nil
 }
 
-func (m *mockStore) View(ctx context.Context) ([]int, error) {
+func (m *mockRepo) View(ctx context.Context) ([]int, error) {
 	result := make([]int, len(m.timestamps))
 	copy(result, m.timestamps)
 	return result, nil
 }
 
-func (m *mockStore) Count(ctx context.Context) (int, error) {
+func (m *mockRepo) Count(ctx context.Context) (int, error) {
 	if m.countErr != nil {
 		return 0, m.countErr
 	}
 	return len(m.timestamps), nil
 }
 
-func (m *mockStore) Load(ctx context.Context) error {
+func (m *mockRepo) Load(ctx context.Context) error {
 	return m.loadErr
 }
 
-func (m *mockStore) RemoveExpired(ctx context.Context, current, threshold int) error {
+func (m *mockRepo) RemoveExpired(ctx context.Context, current, threshold int) error {
 	if m.removeErr != nil {
 		return m.removeErr
 	}
@@ -56,37 +54,37 @@ func (m *mockStore) RemoveExpired(ctx context.Context, current, threshold int) e
 	return nil
 }
 
-func (m *mockStore) Sync(ctx context.Context) error {
+func (m *mockRepo) Sync(ctx context.Context) error {
 	return m.syncErr
 }
 
-func (m *mockStore) Close() error {
+func (m *mockRepo) Close() error {
 	return nil
 }
 
 func TestTimestampService_Initialize(t *testing.T) {
 	tests := []struct {
 		name      string
-		mockStore *mockStore
+		mockRepo *mockRepo
 		wantErr   bool
 	}{
 		{
 			name: "successful initialization",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				timestamps: []int{int(time.Now().Unix()) - 100},
 			},
 			wantErr: false,
 		},
 		{
 			name: "load error",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				loadErr: errors.New("load failed"),
 			},
 			wantErr: true,
 		},
 		{
 			name: "sync error",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				syncErr: errors.New("sync failed"),
 			},
 			wantErr: true,
@@ -95,7 +93,7 @@ func TestTimestampService_Initialize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewTimestampService(tt.mockStore, 60)
+			service := NewTimestampService(tt.mockRepo, 60)
 			ctx := context.Background()
 
 			err := service.Initialize(ctx)
@@ -110,13 +108,13 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 	now := int(time.Now().Unix())
 	tests := []struct {
 		name      string
-		mockStore *mockStore
+		mockRepo *mockRepo
 		wantCount int
 		wantErr   bool
 	}{
 		{
 			name: "successful record",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				timestamps: []int{now - 30},
 			},
 			wantCount: 2, // existing + new
@@ -124,7 +122,7 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 		},
 		{
 			name: "remove expired error",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				removeErr: errors.New("remove failed"),
 			},
 			wantCount: 0,
@@ -132,7 +130,7 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 		},
 		{
 			name: "store error",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				storeErr: errors.New("store failed"),
 			},
 			wantCount: 0,
@@ -140,7 +138,7 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 		},
 		{
 			name: "sync error",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				syncErr: errors.New("sync failed"),
 			},
 			wantCount: 0,
@@ -148,7 +146,7 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 		},
 		{
 			name: "count error",
-			mockStore: &mockStore{
+			mockRepo: &mockRepo{
 				countErr: errors.New("count failed"),
 			},
 			wantCount: 0,
@@ -158,7 +156,7 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewTimestampService(tt.mockStore, 60)
+			service := NewTimestampService(tt.mockRepo, 60)
 			ctx := context.Background()
 
 			count, err := service.RecordTimestamp(ctx)
@@ -173,4 +171,3 @@ func TestTimestampService_RecordTimestamp(t *testing.T) {
 		})
 	}
 }
-

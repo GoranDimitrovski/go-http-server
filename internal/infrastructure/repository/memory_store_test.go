@@ -1,11 +1,12 @@
-package store
+package repository
 
 import (
 	"context"
 	"os"
-	"simplesurance/persistence"
 	"testing"
 	"time"
+
+	"simplesurance/internal/infrastructure/persistence"
 )
 
 func TestMemoryStore_Store(t *testing.T) {
@@ -92,8 +93,6 @@ func TestMemoryStore_View(t *testing.T) {
 			if len(view) != tt.wantCount {
 				t.Errorf("View() length = %v, want %v", len(view), tt.wantCount)
 			}
-
-			// Verify view is a copy (modifying view shouldn't affect store)
 			if len(view) > 0 {
 				view[0] = 999999
 				storeView, _ := store.View(ctx)
@@ -309,17 +308,12 @@ func TestMemoryStore_Sync(t *testing.T) {
 			if err := store.Sync(ctx); err != nil {
 				t.Fatalf("Sync() error = %v", err)
 			}
-
-			// Verify file exists and contains correct data
 			if _, err := os.Stat(filename); err != nil {
 				if len(tt.timestamps) == 0 {
-					// Empty file might not exist, which is okay
 					return
 				}
 				t.Fatalf("File should exist after Sync(): %v", err)
 			}
-
-			// Load into new store and verify
 			newStore := NewMemoryStore(filename, persistence.NewFilePersistence())
 			if err := newStore.Load(ctx); err != nil {
 				t.Fatalf("Load() after Sync() error = %v", err)

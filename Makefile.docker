@@ -57,7 +57,7 @@ app.stop:
 # Run tests in Docker container
 app.test:
 	@echo "Running tests in Docker container..."
-	@docker-compose exec go-http-server go test -v ./...
+	@docker run --rm -v "$${PWD}:/app" -w /app golang:1.22-alpine sh -c "go test -v ./..."
 
 # Open shell in Docker container
 app.shell:

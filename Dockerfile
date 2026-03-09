@@ -22,7 +22,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags='-w -s -extldflags "-static"' \
-    -a -installsuffix cgo -o app .
+    -a -installsuffix cgo -o app ./cmd/server/main.go
 
 # Final stage - minimal alpine with only essential tools
 # This provides the smallest size with health check capability

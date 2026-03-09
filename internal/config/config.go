@@ -5,8 +5,6 @@ import (
 	"os"
 	"strconv"
 )
-
-// Config holds the application configuration
 type Config struct {
 	Filename  string
 	Address   string
@@ -14,8 +12,6 @@ type Config struct {
 	Port      string
 	Threshold int
 }
-
-// Load loads configuration from environment variables with defaults
 func Load() (*Config, error) {
 	cfg := &Config{
 		Filename:  getEnv("FILENAME", "timestamps.log"),
@@ -34,8 +30,6 @@ func Load() (*Config, error) {
 
 	return cfg, nil
 }
-
-// ServerAddr returns the full server address
 func (c *Config) ServerAddr() string {
 	return fmt.Sprintf(":%s", c.Port)
 }

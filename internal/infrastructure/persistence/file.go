@@ -7,29 +7,19 @@ import (
 	"os"
 	"strconv"
 )
-
-// FilePersistenceImpl implements FilePersistence interface
 type FilePersistenceImpl struct{}
-
-// NewFilePersistence creates a new file persistence instance
 func NewFilePersistence() *FilePersistenceImpl {
 	return &FilePersistenceImpl{}
 }
-
-// Append appends a timestamp to the file
 func (f *FilePersistenceImpl) Append(ctx context.Context, timestamp int, filename string) error {
 	return f.WriteToFile(ctx, []int{timestamp}, filename, true)
 }
-
-// Rewrite rewrites the entire file with the given timestamps
 func (f *FilePersistenceImpl) Rewrite(ctx context.Context, timestamps []int, filename string) error {
 	if err := f.truncateFile(ctx, filename); err != nil {
 		return fmt.Errorf("failed to truncate file: %w", err)
 	}
 	return f.WriteToFile(ctx, timestamps, filename, false)
 }
-
-// ReadAll reads all timestamps from the file
 func (f *FilePersistenceImpl) ReadAll(ctx context.Context, filename string) ([]int, error) {
 	if !f.FileExists(filename) {
 		return []int{}, nil
@@ -68,14 +58,10 @@ func (f *FilePersistenceImpl) ReadAll(ctx context.Context, filename string) ([]i
 
 	return timestamps, nil
 }
-
-// FileExists checks if a file exists
 func (f *FilePersistenceImpl) FileExists(filename string) bool {
 	_, err := os.Stat(filename)
 	return !os.IsNotExist(err)
 }
-
-// WriteToFile writes timestamps to a file
 func (f *FilePersistenceImpl) WriteToFile(ctx context.Context, timestamps []int, filename string, append bool) error {
 	flags := os.O_CREATE | os.O_WRONLY
 	if append {
@@ -122,4 +108,3 @@ func (f *FilePersistenceImpl) truncateFile(ctx context.Context, filename string)
 	}
 	return file.Close()
 }
-
