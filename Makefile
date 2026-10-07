@@ -1,26 +1,45 @@
-# Main Makefile - Includes all sub-makefiles
-.PHONY: help
+.PHONY: help build up down stop restart logs shell test fmt health
 
-# Include all makefiles
-include Makefile.dev
-include Makefile.test
-include Makefile.docker
-include Makefile.utils
-
-# Default target
 help:
-	@echo "Go HTTP Server - Makefile Commands"
-	@echo ""
-	@echo "Use category-specific help commands:"
-	@echo "  make dev.help      - Development commands (dev.*)"
-	@echo "  make tests.help    - Testing commands (tests.*)"
-	@echo "  make app.help      - Docker commands (app.*)"
-	@echo "  make utils.help    - Utility commands (utils.*)"
-	@echo ""
-	@echo "Or run 'make' with any target from the included makefiles."
-	@echo ""
-	@echo "Examples:"
-	@echo "  make dev.run       - Run the application locally"
-	@echo "  make app.build     - Build Docker containers"
-	@echo "  make tests.test    - Run all tests"
-	@echo "  make utils.clean   - Clean build artifacts"
+	@echo "make build    Build and start the app"
+	@echo "make up       Start the app"
+	@echo "make down     Stop and remove the app"
+	@echo "make stop     Stop the app"
+	@echo "make restart  Restart the app"
+	@echo "make logs     Follow logs"
+	@echo "make shell    Open a shell in the app container"
+	@echo "make test     go vet + go test -race in a container"
+	@echo "make fmt      gofmt in a container"
+	@echo "make health   Hit the health endpoint"
+
+build:
+	docker compose up --build -d
+
+up:
+	docker compose up -d
+
+down:
+	docker compose down
+
+stop:
+	docker compose stop
+
+restart:
+	docker compose restart
+
+logs:
+	docker compose logs -f
+
+shell:
+	docker compose exec app sh
+
+GO = docker run --rm -v "$(CURDIR):/app" -w /app golang:1.22
+
+test:
+	$(GO) sh -c "go vet ./... && go test -race ./..."
+
+fmt:
+	$(GO) gofmt -l -w .
+
+health:
+	curl -s http://localhost:8000/health

@@ -5,33 +5,29 @@ import (
 	"os"
 	"strconv"
 )
+
 type Config struct {
 	Filename  string
-	Address   string
 	Route     string
 	Port      string
 	Threshold int
 }
+
 func Load() (*Config, error) {
-	cfg := &Config{
+	threshold, err := strconv.Atoi(getEnv("THRESHOLD", "60"))
+	if err != nil || threshold <= 0 {
+		return nil, fmt.Errorf("invalid threshold value %q: must be a positive integer", os.Getenv("THRESHOLD"))
+	}
+	return &Config{
 		Filename:  getEnv("FILENAME", "timestamps.log"),
-		Address:   getEnv("ADDRESS", "localhost"),
 		Route:     getEnv("ROUTE", "/"),
 		Port:      getEnv("PORT", "8000"),
-		Threshold: 60,
-	}
-
-	thresholdStr := getEnv("THRESHOLD", "60")
-	threshold, err := strconv.Atoi(thresholdStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid threshold value: %w", err)
-	}
-	cfg.Threshold = threshold
-
-	return cfg, nil
+		Threshold: threshold,
+	}, nil
 }
+
 func (c *Config) ServerAddr() string {
-	return fmt.Sprintf(":%s", c.Port)
+	return ":" + c.Port
 }
 
 func getEnv(key, defaultValue string) string {

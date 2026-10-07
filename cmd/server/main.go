@@ -11,7 +11,6 @@ import (
 
 	"simplesurance/internal/application"
 	"simplesurance/internal/config"
-	"simplesurance/internal/infrastructure/persistence"
 	"simplesurance/internal/infrastructure/repository"
 	preshttp "simplesurance/internal/presentation/http"
 )
@@ -22,8 +21,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 	logger := log.New(os.Stdout, "[SERVER] ", log.LstdFlags|log.Lshortfile)
-	persister := persistence.NewFilePersistence()
-	memoryStore := repository.NewMemoryStore(cfg.Filename, persister)
+	memoryStore := repository.NewMemoryStore(cfg.Filename)
 	timestampService := application.NewTimestampService(memoryStore, cfg.Threshold)
 	timestampHandler := preshttp.NewTimestampHandler(timestampService, logger)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -33,8 +31,7 @@ func main() {
 		logger.Fatalf("failed to initialize service: %v", err)
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc(cfg.Route, timestampHandler.HandleTimestamp)
-	mux.HandleFunc("/health", timestampHandler.HandleHealth)
+	timestampHandler.Routes(mux, cfg.Route)
 
 	server := &http.Server{
 		Addr:         cfg.ServerAddr(),
@@ -44,7 +41,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 	go func() {
-		logger.Printf("Starting server at http://%s%s", cfg.Address, cfg.ServerAddr())
+		logger.Printf("Listening on %s", cfg.ServerAddr())
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("server failed to start: %v", err)
 		}

@@ -2,109 +2,62 @@ package persistence
 
 import (
 	"bufio"
-	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 )
-type FilePersistenceImpl struct{}
-func NewFilePersistence() *FilePersistenceImpl {
-	return &FilePersistenceImpl{}
-}
-func (f *FilePersistenceImpl) Append(ctx context.Context, timestamp int, filename string) error {
-	return f.WriteToFile(ctx, []int{timestamp}, filename, true)
-}
-func (f *FilePersistenceImpl) Rewrite(ctx context.Context, timestamps []int, filename string) error {
-	if err := f.truncateFile(ctx, filename); err != nil {
-		return fmt.Errorf("failed to truncate file: %w", err)
-	}
-	return f.WriteToFile(ctx, timestamps, filename, false)
-}
-func (f *FilePersistenceImpl) ReadAll(ctx context.Context, filename string) ([]int, error) {
-	if !f.FileExists(filename) {
+
+// ReadAll returns the timestamps stored in filename, or none if it doesn't exist.
+func ReadAll(filename string) ([]int, error) {
+	file, err := os.Open(filename)
+	if errors.Is(err, os.ErrNotExist) {
 		return []int{}, nil
 	}
-
-	file, err := os.OpenFile(filename, os.O_RDONLY, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file for reading: %w", err)
 	}
 	defer file.Close()
 
-	var timestamps []int
+	timestamps := []int{}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
 		line := scanner.Text()
 		if line == "" {
 			continue
 		}
-
 		timestamp, err := strconv.Atoi(line)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse timestamp '%s': %w", line, err)
 		}
 		timestamps = append(timestamps, timestamp)
 	}
-
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error while scanning file: %w", err)
 	}
-
 	return timestamps, nil
 }
-func (f *FilePersistenceImpl) FileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
-}
-func (f *FilePersistenceImpl) WriteToFile(ctx context.Context, timestamps []int, filename string, append bool) error {
-	flags := os.O_CREATE | os.O_WRONLY
-	if append {
-		flags |= os.O_APPEND
-	} else {
-		flags |= os.O_TRUNC
-	}
 
-	file, err := os.OpenFile(filename, flags, 0644)
+// WriteAll replaces filename's contents atomically: write a temp file, then rename over the original,
+// so a crash mid-write never leaves a truncated file behind.
+func WriteAll(filename string, timestamps []int) error {
+	tmp := filename + ".tmp"
+	file, err := os.Create(tmp)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer file.Close()
-
 	writer := bufio.NewWriter(file)
-	defer writer.Flush()
-
 	for _, timestamp := range timestamps {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if _, err := writer.WriteString(fmt.Sprintf("%d\n", timestamp)); err != nil {
-			return fmt.Errorf("failed to write timestamp: %w", err)
-		}
+		writer.WriteString(strconv.Itoa(timestamp))
+		writer.WriteByte('\n')
 	}
-
-	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("failed to flush writer: %w", err)
+	// bufio.Writer keeps the first write error and returns it from Flush.
+	if err := errors.Join(writer.Flush(), file.Close()); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("failed to write temp file: %w", err)
 	}
-
+	if err := os.Rename(tmp, filename); err != nil {
+		return fmt.Errorf("failed to replace file: %w", err)
+	}
 	return nil
-}
-
-func (f *FilePersistenceImpl) truncateFile(ctx context.Context, filename string) error {
-	file, err := os.OpenFile(filename, os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, nothing to truncate
-		}
-		return fmt.Errorf("failed to truncate file: %w", err)
-	}
-	return file.Close()
 }

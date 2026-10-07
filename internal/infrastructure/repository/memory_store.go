@@ -3,90 +3,59 @@ package repository
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"simplesurance/internal/infrastructure/persistence"
 )
+
+// MemoryStore keeps timestamps in memory and rewrites the file on every change.
+// Rewriting the whole file per request is O(n) disk I/O; switch to a periodic flush if throughput matters.
 type MemoryStore struct {
+	mu         sync.Mutex // also serializes file writes
 	timestamps []int
 	fileName   string
-	persister  persistence.FilePersistence
-	mu         sync.RWMutex
 }
-func NewMemoryStore(fileName string, persister persistence.FilePersistence) *MemoryStore {
-	return &MemoryStore{
-		timestamps: make([]int, 0),
-		fileName:   fileName,
-		persister:  persister,
-	}
-}
-func (s *MemoryStore) Store(ctx context.Context, timestamp int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
-	s.timestamps = append(s.timestamps, timestamp)
-	return nil
+func NewMemoryStore(fileName string) *MemoryStore {
+	return &MemoryStore{timestamps: []int{}, fileName: fileName}
 }
-func (s *MemoryStore) View(ctx context.Context) ([]int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	result := make([]int, len(s.timestamps))
-	copy(result, s.timestamps)
-	return result, nil
-}
-func (s *MemoryStore) Count(ctx context.Context) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return len(s.timestamps), nil
-}
 func (s *MemoryStore) Load(ctx context.Context) error {
-	timestamps, err := s.persister.ReadAll(ctx, s.fileName)
+	timestamps, err := persistence.ReadAll(s.fileName)
 	if err != nil {
 		return fmt.Errorf("failed to load timestamps: %w", err)
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	s.timestamps = timestamps
 	return nil
 }
-func (s *MemoryStore) RemoveExpired(ctx context.Context, current, threshold int) error {
+
+func (s *MemoryStore) Record(ctx context.Context, now, threshold int) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	validTimestamps := make([]int, 0, len(s.timestamps))
-	for _, timestamp := range s.timestamps {
-		if current-timestamp < threshold {
-			validTimestamps = append(validTimestamps, timestamp)
-		}
-	}
-	if len(validTimestamps) < cap(validTimestamps) {
-		trimmed := make([]int, len(validTimestamps))
-		copy(trimmed, validTimestamps)
-		s.timestamps = trimmed
-	} else {
-		s.timestamps = validTimestamps
-	}
-	return nil
+	s.timestamps = append(s.timestamps, now)
+	return s.pruneAndSave(now, threshold)
 }
-func (s *MemoryStore) Sync(ctx context.Context) error {
-	s.mu.RLock()
-	timestamps, err := s.View(ctx)
-	s.mu.RUnlock()
 
-	if err != nil {
-		return fmt.Errorf("failed to get timestamps for sync: %w", err)
-	}
-
-	if err := s.persister.Rewrite(ctx, timestamps, s.fileName); err != nil {
-		return fmt.Errorf("failed to sync timestamps: %w", err)
-	}
-
-	return nil
+func (s *MemoryStore) Prune(ctx context.Context, now, threshold int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pruneAndSave(now, threshold)
 }
+
+// pruneAndSave must be called with s.mu held.
+func (s *MemoryStore) pruneAndSave(now, threshold int) (int, error) {
+	s.timestamps = slices.DeleteFunc(s.timestamps, func(ts int) bool { return now-ts >= threshold })
+	if err := persistence.WriteAll(s.fileName, s.timestamps); err != nil {
+		return 0, fmt.Errorf("failed to persist timestamps: %w", err)
+	}
+	return len(s.timestamps), nil
+}
+
 func (s *MemoryStore) Close() error {
-	ctx := context.Background()
-	return s.Sync(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return persistence.WriteAll(s.fileName, s.timestamps)
 }
